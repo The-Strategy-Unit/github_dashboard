@@ -1,0 +1,22 @@
+---
+title: "Github Quarto"
+author: "Ozayr Mohammed"
+format: html
+editor: visual
+---
+
+## CODEOWNERS Summary
+
+#### *\-- Placeholder \--*
+
+## Search Repositories
+
+```{r}
+#These are 5 of our repos
+gh::gh(
+  "GET /orgs/{org}/repos",
+  org = "The-Strategy-Unit",
+  .limit = 5
+) |> 
+  sapply(\(x) x[["full_name"]])
+```
