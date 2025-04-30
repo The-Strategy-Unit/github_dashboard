@@ -8,12 +8,19 @@ editor: visual
 ```{r}
 #| include: false
 #get repo names, limit can be set to Inf for all 
-repos <- gh::gh(
+repo_results <- gh::gh(
   "GET /orgs/{org}/repos",
   org = "The-Strategy-Unit",
   .limit = Inf
-) |> 
-  sapply(\(x) x[["name"]])
+)
+
+#gets repo names and true/false if it's private
+repos <- repo_results |> 
+  purrr::map(\(x) tibble::tibble(
+    repo_name = purrr::pluck(x, "name"),
+    is_private = purrr::pluck(x, "private")
+  )) |> 
+  purrr::list_rbind()
 
 
 #get org memeber usernames, limit can be set to Inf for all 
@@ -29,7 +36,7 @@ org_members <- gh::gh(
 #itterate through repo names 
 #get codeowner file info if it exists
 co_returned <- purrr::map_dfr(
-  repos, \(repo_name){
+  repos$repo_name, \(repo_name){
   
   result <- tryCatch({
     gh::gh(
@@ -41,22 +48,31 @@ co_returned <- purrr::map_dfr(
     )
   },
   error = function(e) {
-    #message(sprintf("File not found or error in '%s': %s", repo_name, e$message))
     return("No file found")
   })
   
   tibble::tibble(
-    repo = repo_name, 
+    repo_name = repo_name, 
     co_file = list(result)
     
   )
   
 })
 
+# join repos and co_returned
+
+
+
+
 #reads content of all codeowner urls
 #returns table of all repo names, and respective codeowner files and owners if they exists
 
-co_table <- co_returned |> 
+
+  
+
+
+co_table <- repos |> 
+  dplyr::left_join(co_returned) |> 
   dplyr::mutate(
     co_url = 
       purrr::map_chr(
@@ -69,49 +85,43 @@ co_table <- co_returned |>
         co_url,
         purrr::possibly(
           readLines,
-          otherwise = "error"),
+          otherwise = "No file found"),
       ),
     
-    raw_codeowners =
+    codeowners_raw =
       purrr::map(
         co_content,
-        ~stringr::str_extract_all(
-          .x,
+        \(x) stringr::str_extract_all(
+          x,
           "(?<=@)(?!primary-owner|secondary-owner)[A-Za-z0-9-]+"
         ) |>
           unlist()
+        
       ),
     
-    matched_codeowners = 
+    codeowners_matched = 
       stringr::str_extract_all(
-        raw_codeowners, 
+        codeowners_raw, 
         org_members),
-    
-    error_text = dplyr::case_when(
-      co_file == "No file found" &
-        co_content == "error" ~ "No file found",
-      co_file != "No file found" &
-        co_content == "error" ~ "possibly private repo")
-    
   )
 
 n_repos <- nrow(co_table)
 
 n_with_codeowners_public <- co_table |> 
-  dplyr::filter(co_url != "No file found" &
-                  co_content != "error") |> 
+  dplyr::filter(is_private == FALSE &
+                  co_url != "No file found") |> 
   nrow()
 
 n_with_codeowners_private <- co_table |> 
-  dplyr::filter(co_url != "No file found" &
-                  co_content == "error") |> 
+  dplyr::filter(is_private == TRUE &
+                  co_url != "No file found") |> 
   nrow()
 
 codeowners_overview <- co_table |> 
-  tidyr::unnest(raw_codeowners) |> 
-  dplyr::group_by(raw_codeowners) |> 
+  tidyr::unnest(codeowners_raw) |> 
+  dplyr::group_by(codeowners_raw) |> 
   dplyr::summarise(count = dplyr::n()) |> 
-  dplyr::rename("owner" = raw_codeowners)
+  dplyr::rename("owner" = codeowners_raw)
 
 ```
 
@@ -121,6 +131,7 @@ Of these, `r n_with_codeowners_public` **public** repositories and `r n_with_cod
 \
 The following table is a count of users mentioned in the CODEOWNERS files of public repositories in the Strategy Unit Organisation.\
 \
+
 ```{r}
 #| echo: false
 gt::gt(codeowners_overview |> 
@@ -129,4 +140,3 @@ gt::gt(codeowners_overview |>
            )
 )
 ```
-
