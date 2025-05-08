@@ -120,7 +120,8 @@ n_with_codeowners_private <- co_table |>
 codeowners_overview <- co_table |> 
   tidyr::unnest(codeowners_raw) |> 
   dplyr::group_by(codeowners_raw) |> 
-  dplyr::summarise(count = dplyr::n()) |> 
+  dplyr::summarise(count = dplyr::n(),
+                   repos = paste(repo_name, collapse = ", ")) |> 
   dplyr::rename("owner" = codeowners_raw)
 
 ```
