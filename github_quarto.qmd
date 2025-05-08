@@ -7,116 +7,47 @@ editor: visual
 
 ```{r}
 #| include: false
-#get repo names, limit can be set to Inf for all 
-repo_results <- gh::gh(
-  "GET /orgs/{org}/repos",
-  org = "The-Strategy-Unit",
-  .limit = Inf
+
+#load functions
+purrr::walk(
+  list.files("r", pattern = ".R$", full.names = TRUE, recursive = TRUE),
+  source
 )
 
-#gets repo names and true/false if it's private
-repos <- repo_results |> 
-  purrr::map(\(x) tibble::tibble(
-    repo_name = purrr::pluck(x, "name"),
-    is_private = purrr::pluck(x, "private")
-  )) |> 
-  purrr::list_rbind()
+#get repo names, default limit is Inf to get all repos
+repo_results <- get_repos(limit = Inf)
+
+#turns repo_results into tibble of repo names and true/false if private
+repos <- result_to_tibble(repo_results)
 
 
-#get org memeber usernames, limit can be set to Inf for all 
-#names are regexed
-org_members <- gh::gh(
-  "GET /orgs/{org}/members",
-  org = "The-Strategy-Unit",
-  .limit = Inf
-) |> 
-  sapply(\(x) x[["login"]]) |>
-  paste(collapse = "|")
+#get org member usernames
+org_members <- get_members()
 
-#itterate through repo names 
-#get codeowner file info if it exists
-co_returned <- purrr::map_dfr(
-  repos$repo_name, \(repo_name){
-  
-  result <- tryCatch({
-    gh::gh(
-      "GET /repos/{owner}/{repo}/contents/{path}",
-      # https://docs.github.com/en/rest/repos/contents?apiVersion=2022-11-28#get-repository-content
-      owner = "The-Strategy-Unit",
-      repo = repo_name,  
-      path = "CODEOWNERS"
-    )
-  },
-  error = function(e) {
-    return("No file found")
-  })
-  
-  tibble::tibble(
-    repo_name = repo_name, 
-    co_file = list(result)
-    
-  )
-  
-})
+#possibly get codeowner file details for repos
+co_returned <- get_codeowner_files(repos)
 
-# join repos and co_returned
+#creates codeowner table using repos, org_members and co_returned
+co_table <- make_codeowner_table(repos, 
+                                 org_members,
+                                 co_returned)
 
-
-
-
-#reads content of all codeowner urls
-#returns table of all repo names, and respective codeowner files and owners if they exists
-
-
-  
-
-
-co_table <- repos |> 
-  dplyr::left_join(co_returned) |> 
-  dplyr::mutate(
-    co_url = 
-      purrr::map_chr(
-        co_file, 
-        "download_url",
-        .default = "No file found"),
-    
-    co_content = 
-      purrr::map(
-        co_url,
-        purrr::possibly(
-          readLines,
-          otherwise = "No file found"),
-      ),
-    
-    codeowners_raw =
-      purrr::map(
-        co_content,
-        \(x) stringr::str_extract_all(
-          x,
-          "(?<=@)(?!primary-owner|secondary-owner)[A-Za-z0-9-]+"
-        ) |>
-          unlist()
-        
-      ),
-    
-    codeowners_matched = 
-      stringr::str_extract_all(
-        codeowners_raw, 
-        org_members),
-  )
-
+#count of repos
 n_repos <- nrow(co_table)
 
+#count of public repos
 n_with_codeowners_public <- co_table |> 
   dplyr::filter(is_private == FALSE &
                   co_url != "No file found") |> 
   nrow()
 
+#count of private repos
 n_with_codeowners_private <- co_table |> 
   dplyr::filter(is_private == TRUE &
                   co_url != "No file found") |> 
   nrow()
 
+#shows number of owned repos per username
 codeowners_overview <- co_table |> 
   tidyr::unnest(codeowners_raw) |> 
   dplyr::group_by(codeowners_raw) |> 
