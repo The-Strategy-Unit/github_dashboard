@@ -1,5 +1,5 @@
 ---
-title: "Github Quarto"
+title: "The Strategy Unit Github Dashboard"
 author: "Ozayr Mohammed"
 format: html
 ---
