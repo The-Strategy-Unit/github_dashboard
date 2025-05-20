@@ -2,7 +2,6 @@
 title: "Github Quarto"
 author: "Ozayr Mohammed"
 format: html
-editor: visual
 ---
 
 ```{r}
