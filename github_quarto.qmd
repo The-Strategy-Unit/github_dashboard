@@ -1,0 +1,73 @@
+---
+title: "The Strategy Unit Github Dashboard"
+author: "Ozayr Mohammed"
+format: html
+---
+
+```{r}
+#| include: false
+
+#load functions
+purrr::walk(
+  list.files("r", pattern = ".R$", full.names = TRUE, recursive = TRUE),
+  source
+)
+
+#get repo names, default limit is Inf to get all repos
+repo_results <- get_repos(limit = Inf)
+
+#turns repo_results into tibble of repo names and true/false if private
+repos <- result_to_tibble(repo_results)
+
+
+#get org member usernames
+org_members <- get_members()
+
+#possibly get codeowner file details for repos
+co_returned <- get_codeowner_files(repos)
+
+#creates codeowner table using repos, org_members and co_returned
+co_table <- make_codeowner_table(repos, 
+                                 org_members,
+                                 co_returned)
+
+#count of repos
+n_repos <- nrow(co_table)
+
+#count of public repos
+n_with_codeowners_public <- co_table |> 
+  dplyr::filter(is_private == FALSE &
+                  co_url != "No file found") |> 
+  nrow()
+
+#count of private repos
+n_with_codeowners_private <- co_table |> 
+  dplyr::filter(is_private == TRUE &
+                  co_url != "No file found") |> 
+  nrow()
+
+#shows number of owned repos per username
+codeowners_overview <- co_table |> 
+  tidyr::unnest(codeowners_raw) |> 
+  dplyr::group_by(codeowners_raw) |> 
+  dplyr::summarise(count = dplyr::n(),
+                   repos = paste(repo_name, collapse = ", ")) |> 
+  dplyr::rename("owner" = codeowners_raw)
+
+```
+
+There are `r n_repos` repositories in the Strategy Unit Organisation.\
+
+Of these, `r n_with_codeowners_public` **public** repositories and `r n_with_codeowners_private` **private** repositories have a CODEOWNERS file.\
+\
+The following table is a count of users mentioned in the CODEOWNERS files of public repositories in the Strategy Unit Organisation.\
+\
+
+```{r}
+#| echo: false
+gt::gt(codeowners_overview |> 
+         dplyr::arrange(
+           stringr::str_to_lower(owner)
+           )
+)
+```
