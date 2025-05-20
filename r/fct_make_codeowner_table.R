@@ -1,6 +1,5 @@
 # produce table of codeowners using repos, codeowner files
 # and org members
-# creates 
 make_codeowner_table <- function(repos, 
                                  members, 
                                  codeowner_files){
